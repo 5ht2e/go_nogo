@@ -1,0 +1,208 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Go / No-Go Task</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      text-align: center;
+      background-color: #f5f5f5;
+    }
+
+    #container {
+      margin-top: 80px;
+    }
+
+    #stimulus {
+      font-size: 100px;
+      margin: 40px;
+      height: 120px;
+    }
+
+    #instructions, #settings {
+      font-size: 18px;
+      margin: 20px;
+    }
+
+    input {
+      padding: 5px;
+      font-size: 16px;
+      width: 80px;
+      text-align: center;
+    }
+
+    button {
+      padding: 10px 20px;
+      font-size: 16px;
+      cursor: pointer;
+      margin: 10px;
+    }
+  </style>
+</head>
+<body>
+
+<div id="container">
+  <h1>Go / No-Go Task</h1>
+
+  <div id="settings">
+  <label>Go Trial Percentage (0–100): </label>
+  <input type="number" id="goRatioInput" value="75" min="0" max="100">
+  <br><br>
+  <label>Total Trials: </label>
+  <input type="number" id="totalTrialsInput" value="32" min="1" max="500">
+</div>
+  
+  <div id="instructions">
+    Press <b>SPACE</b> when you see <b>X</b><br>
+    Do nothing when you see <b>O</b><br><br>
+    Respond as quickly and accurately as possible.
+  </div>
+
+  <button id="startBtn">Start Task</button>
+  
+  <div id="stimulus">+</div>
+</div>
+
+<script>
+  let TOTAL_TRIALS = 32;
+
+  let GO_RATIO = 0.75;
+
+  let trials = [];
+  let currentTrial = 0;
+  let trialData = [];
+
+  let stimulusOnset = 0;
+  let awaitingResponse = false;
+  let trialTimeout = null;
+
+  function generateTrials() {
+    trials = [];
+    for (let i = 0; i < TOTAL_TRIALS; i++) {
+      trials.push(Math.random() < GO_RATIO ? "X" : "O");
+    }
+  }
+
+  function startTask() {
+    // Read user setting
+    let inputVal = document.getElementById("goRatioInput").value;
+    GO_RATIO = Math.min(1, Math.max(0, inputVal / 100));
+    let trialInput = document.getElementById("totalTrialsInput").value;
+    TOTAL_TRIALS = Math.max(1, Math.floor(trialInput));
+
+    document.getElementById("startBtn").style.display = "none";
+    document.getElementById("instructions").style.display = "none";
+    document.getElementById("settings").style.display = "none";
+
+    generateTrials();
+    currentTrial = 0;
+    trialData = [];
+
+    setTimeout(nextTrial, 1000);
+  }
+
+  function nextTrial() {
+    if (currentTrial >= trials.length) {
+      endTask();
+      return;
+    }
+
+    const stim = trials[currentTrial];
+    document.getElementById("stimulus").textContent = stim;
+
+    stimulusOnset = performance.now();
+    awaitingResponse = true;
+
+    trialData.push({
+      stimulus: stim,
+      response: null,
+      rt: null
+    });
+
+    currentTrial++;
+
+    trialTimeout = setTimeout(endTrial, 800);
+  }
+
+  function endTrial() {
+    awaitingResponse = false;
+    document.getElementById("stimulus").textContent = "+";
+    setTimeout(nextTrial, 800);
+  }
+
+  document.addEventListener("keydown", function(event) {
+    if (!awaitingResponse) return;
+
+    if (event.code === "Space") {
+      const rt = performance.now() - stimulusOnset;
+
+      let trial = trialData[currentTrial - 1];
+      trial.response = "press";
+      trial.rt = Math.round(rt);
+
+      awaitingResponse = false;
+
+      clearTimeout(trialTimeout);
+
+      document.getElementById("stimulus").textContent = "+";
+      setTimeout(nextTrial, 200);
+    }
+  });
+
+  function endTask() {
+    let correctGo = 0;
+    let missedGo = 0;
+    let falseAlarms = 0;
+    let correctNoGo = 0;
+    let goRTs = [];
+
+    trialData.forEach(trial => {
+      if (trial.stimulus === "X") {
+        if (trial.response === "press") {
+          correctGo++;
+          goRTs.push(trial.rt);
+        } else {
+          missedGo++;
+        }
+      }
+
+      if (trial.stimulus === "O") {
+        if (trial.response === "press") {
+          falseAlarms++;
+        } else {
+          correctNoGo++;
+        }
+      }
+    });
+
+    let avgRT = goRTs.length > 0
+      ? Math.round(goRTs.reduce((a, b) => a + b, 0) / goRTs.length)
+      : "N/A";
+
+    document.getElementById("container").innerHTML = `
+      <h2>Task Complete</h2>
+      <p><b>Correct Go Responses:</b> ${correctGo}</p>
+      <p><b>Missed Go Trials:</b> ${missedGo}</p>
+      <p><b>False Alarms:</b> ${falseAlarms}</p>
+      <p><b>Correct No-Go Trials:</b> ${correctNoGo}</p>
+      <p><b>Average Reaction Time (Go trials):</b> ${avgRT} ms</p>
+      <br>
+      <button onclick="restartTask()">Run Again</button>
+      <p>Open console (F12) for full trial data.</p>
+    `;
+
+    console.log("Trial Data:", trialData);
+  }
+
+  function restartTask() {
+    location.reload();
+  }
+
+  document.getElementById("startBtn").addEventListener("click", startTask);
+</script>
+
+</body>
+</html>
+
