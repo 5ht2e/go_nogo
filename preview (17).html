@@ -1,0 +1,663 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Adaptive Go / No-Go Task</title>
+  <style>
+    :root {
+      --bg: #f5f5f5;
+      --panel: #ffffff;
+      --text: #1d1d1f;
+      --muted: #666;
+      --border: #d9d9d9;
+      --accent: #222;
+      --green: rgba(40, 167, 69, 0.35);
+      --red: rgba(220, 53, 69, 0.35);
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      font-family: Arial, sans-serif;
+      text-align: center;
+      background: var(--bg);
+      color: var(--text);
+    }
+
+    body.feedback-correct {
+      background: linear-gradient(var(--green), var(--green)), var(--bg);
+    }
+
+    body.feedback-wrong {
+      background: linear-gradient(var(--red), var(--red)), var(--bg);
+    }
+
+    #container {
+      max-width: 980px;
+      margin: 28px auto;
+      padding: 20px;
+    }
+
+    .panel {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 18px;
+      margin-bottom: 18px;
+      box-shadow: 0 6px 20px rgba(0, 0, 0, 0.06);
+    }
+
+    h1, h2, h3 { margin-top: 0; }
+
+    .settings-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+      gap: 14px;
+      text-align: left;
+    }
+
+    .setting-item {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      padding: 10px;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      background: #fafafa;
+    }
+
+    label {
+      font-size: 14px;
+      font-weight: 700;
+    }
+
+    input[type="number"],
+    input[type="text"],
+    select,
+    input[type="file"] {
+      width: 100%;
+      padding: 9px 10px;
+      font-size: 15px;
+      border: 1px solid #bfbfbf;
+      border-radius: 10px;
+      background: #fff;
+    }
+
+    button {
+      padding: 10px 16px;
+      font-size: 15px;
+      cursor: pointer;
+      margin: 6px;
+      border: none;
+      border-radius: 10px;
+      background: var(--accent);
+      color: white;
+    }
+
+    button.secondary {
+      background: #666;
+    }
+
+    button.danger {
+      background: #b02a37;
+    }
+
+    #instructions {
+      font-size: 18px;
+      line-height: 1.6;
+    }
+
+    #statusBar {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      gap: 10px;
+      margin-bottom: 18px;
+      color: var(--muted);
+      font-size: 15px;
+    }
+
+    .status-pill {
+      background: #fff;
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      padding: 8px 14px;
+    }
+
+    #stimulusArea {
+      min-height: 260px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin: 14px auto;
+    }
+
+    #stimulusText {
+      font-size: 120px;
+      font-weight: 700;
+      line-height: 1;
+      user-select: none;
+    }
+
+    #stimulusImage {
+      max-width: 260px;
+      max-height: 260px;
+      display: none;
+      user-select: none;
+      pointer-events: none;
+      border-radius: 16px;
+    }
+
+    .stim-preview {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+      font-size: 14px;
+      color: var(--muted);
+    }
+
+    .small {
+      font-size: 13px;
+      color: var(--muted);
+    }
+
+    .hidden {
+      display: none !important;
+    }
+  </style>
+</head>
+<body>
+  <div id="container">
+    <h1>Adaptive Go / No-Go Task</h1>
+
+    <div id="setupPanel" class="panel">
+      <h2>Settings</h2>
+      <div class="settings-grid">
+        <div class="setting-item">
+          <label for="goRatioInput">Go Trial Percentage (0–100)</label>
+          <input type="number" id="goRatioInput" value="75" min="0" max="100">
+        </div>
+        <div class="setting-item">
+          <label for="totalTrialsInput">Trials Per Round</label>
+          <input type="number" id="totalTrialsInput" value="32" min="1" max="500">
+        </div>
+        <div class="setting-item">
+          <label for="trialDurationInput">Starting Trial Time (ms)</label>
+          <input type="number" id="trialDurationInput" value="1000" min="50" step="10">
+        </div>
+        <div class="setting-item">
+          <label for="roundThresholdInput">Adaptive Accuracy Threshold (%)</label>
+          <input type="number" id="roundThresholdInput" value="85" min="0" max="100" step="1">
+        </div>
+        <div class="setting-item">
+          <label for="adaptiveStepInput">Adaptive Change Per Round (ms)</label>
+          <input type="number" id="adaptiveStepInput" value="50" min="0" step="10">
+        </div>
+        <div class="setting-item">
+          <label for="itiInput">Inter-Trial Interval (ms)</label>
+          <input type="number" id="itiInput" value="800" min="0" step="10">
+        </div>
+        <div class="setting-item">
+          <label for="correctDeltaInput">Change Trial Time After Correct Answer (ms)</label>
+          <input type="number" id="correctDeltaInput" value="0" step="10">
+          <div class="small">Use a negative value to make correct answers faster immediately.</div>
+        </div>
+        <div class="setting-item">
+          <label for="incorrectDeltaInput">Change Trial Time After Incorrect Answer (ms)</label>
+          <input type="number" id="incorrectDeltaInput" value="0" step="10">
+          <div class="small">Use a positive value to slow the task after mistakes.</div>
+        </div>
+        <div class="setting-item">
+          <label for="feedbackModeInput">Feedback Mode</label>
+          <select id="feedbackModeInput">
+            <option value="none">No Feedback</option>
+            <option value="visual">Visual Feedback</option>
+            <option value="audio">Audio Feedback</option>
+            <option value="both">Visual and Audio Feedback</option>
+          </select>
+        </div>
+      </div>
+
+      <h3 style="margin-top: 18px;">Go Stimulus</h3>
+      <div class="settings-grid">
+        <div class="setting-item">
+          <label for="goTextInput">Go Text</label>
+          <input type="text" id="goTextInput" value="X">
+        </div>
+        <div class="setting-item">
+          <label for="goFileInput">Go Image</label>
+          <input type="file" id="goFileInput" accept="image/*">
+          <div class="stim-preview" id="goPreviewText">Using text stimulus.</div>
+          <button type="button" class="danger" id="removeGoImageBtn">Remove Go Image</button>
+        </div>
+      </div>
+
+      <h3 style="margin-top: 18px;">No-Go Stimulus</h3>
+      <div class="settings-grid">
+        <div class="setting-item">
+          <label for="nogoTextInput">No-Go Text</label>
+          <input type="text" id="nogoTextInput" value="O">
+        </div>
+        <div class="setting-item">
+          <label for="nogoFileInput">No-Go Image</label>
+          <input type="file" id="nogoFileInput" accept="image/*">
+          <div class="stim-preview" id="nogoPreviewText">Using text stimulus.</div>
+          <button type="button" class="danger" id="removeNogoImageBtn">Remove No-Go Image</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="taskPanel" class="panel">
+      <div id="instructions">
+        Press <b>SPACE</b> when you see the <b>Go</b> stimulus.<br>
+        Do nothing when you see the <b>No-Go</b> stimulus.<br><br>
+        Respond as quickly and accurately as possible.
+      </div>
+
+      <button id="startBtn">Start Task</button>
+
+      <div id="statusBar">
+        <div class="status-pill">Round Trial Time: <span id="currentTrialTimeDisplay">1000</span> ms</div>
+        <div class="status-pill">Trial: <span id="trialCountDisplay">0 / 0</span></div>
+      </div>
+
+      <div id="stimulusArea">
+        <div id="stimulusText">+</div>
+        <img id="stimulusImage" alt="Stimulus image">
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const MIN_TRIAL_TIME = 50;
+    const FEEDBACK_FLASH_MS = 180;
+    const FAST_NEXT_DELAY = 200;
+
+    let TOTAL_TRIALS = 32;
+    let GO_RATIO = 0.75;
+    let baseTrialDuration = 1000;
+    let currentTrialDuration = 1000;
+    let adaptiveThreshold = 85;
+    let adaptiveStep = 50;
+    let interTrialInterval = 800;
+    let correctDelta = 0;
+    let incorrectDelta = 0;
+    let feedbackMode = 'none';
+
+    let trials = [];
+    let currentTrial = 0;
+    let trialData = [];
+
+    let stimulusOnset = 0;
+    let awaitingResponse = false;
+    let taskActive = false;
+    let trialTimeout = null;
+    let nextTrialTimeout = null;
+    let roundSummary = null;
+
+    let goStimulus = { text: 'X', image: null, fileName: null };
+    let nogoStimulus = { text: 'O', image: null, fileName: null };
+
+    const startBtn = document.getElementById('startBtn');
+    const stimulusText = document.getElementById('stimulusText');
+    const stimulusImage = document.getElementById('stimulusImage');
+    const currentTrialTimeDisplay = document.getElementById('currentTrialTimeDisplay');
+    const trialCountDisplay = document.getElementById('trialCountDisplay');
+
+    function clampTrialTime(ms) {
+      return Math.max(MIN_TRIAL_TIME, Math.round(ms));
+    }
+
+    function readSettings() {
+      GO_RATIO = Math.min(1, Math.max(0, Number(document.getElementById('goRatioInput').value || 75) / 100));
+      TOTAL_TRIALS = Math.max(1, Math.floor(Number(document.getElementById('totalTrialsInput').value || 32)));
+      baseTrialDuration = clampTrialTime(Number(document.getElementById('trialDurationInput').value || 1000));
+      currentTrialDuration = baseTrialDuration;
+      adaptiveThreshold = Math.min(100, Math.max(0, Number(document.getElementById('roundThresholdInput').value || 85)));
+      adaptiveStep = Math.max(0, Number(document.getElementById('adaptiveStepInput').value || 50));
+      interTrialInterval = Math.max(0, Number(document.getElementById('itiInput').value || 800));
+      correctDelta = Number(document.getElementById('correctDeltaInput').value || 0);
+      incorrectDelta = Number(document.getElementById('incorrectDeltaInput').value || 0);
+      feedbackMode = document.getElementById('feedbackModeInput').value;
+
+      goStimulus.text = document.getElementById('goTextInput').value || 'X';
+      nogoStimulus.text = document.getElementById('nogoTextInput').value || 'O';
+
+      document.getElementById('trialDurationInput').value = baseTrialDuration;
+      updateStatusBar();
+    }
+
+    function updateStatusBar() {
+      currentTrialTimeDisplay.textContent = currentTrialDuration;
+      trialCountDisplay.textContent = `${Math.min(currentTrial, TOTAL_TRIALS)} / ${TOTAL_TRIALS}`;
+    }
+
+    function generateTrials() {
+      trials = [];
+      for (let i = 0; i < TOTAL_TRIALS; i++) {
+        trials.push(Math.random() < GO_RATIO ? 'go' : 'nogo');
+      }
+    }
+
+    function clearScheduledTimeouts() {
+      clearTimeout(trialTimeout);
+      clearTimeout(nextTrialTimeout);
+      trialTimeout = null;
+      nextTrialTimeout = null;
+    }
+
+    function showFixation() {
+      stimulusImage.style.display = 'none';
+      stimulusText.style.display = 'block';
+      stimulusText.textContent = '+';
+    }
+
+    function renderStimulus(kind) {
+      const stim = kind === 'go' ? goStimulus : nogoStimulus;
+      if (stim.image) {
+        stimulusText.style.display = 'none';
+        stimulusImage.style.display = 'block';
+        stimulusImage.src = stim.image;
+        stimulusImage.alt = kind === 'go' ? 'Go stimulus' : 'No-Go stimulus';
+      } else {
+        stimulusImage.style.display = 'none';
+        stimulusText.style.display = 'block';
+        stimulusText.textContent = stim.text || (kind === 'go' ? 'X' : 'O');
+      }
+    }
+
+    function scheduleNextTrial(delay) {
+      nextTrialTimeout = setTimeout(nextTrial, delay);
+    }
+
+    function applyPerTrialAdjustment(wasCorrect) {
+      const delta = wasCorrect ? correctDelta : incorrectDelta;
+      currentTrialDuration = clampTrialTime(currentTrialDuration + delta);
+      updateStatusBar();
+    }
+
+    function shouldUseVisualFeedback() {
+      return feedbackMode === 'visual' || feedbackMode === 'both';
+    }
+
+    function shouldUseAudioFeedback() {
+      return feedbackMode === 'audio' || feedbackMode === 'both';
+    }
+
+    function flashFeedback(isCorrect) {
+      if (!shouldUseVisualFeedback()) return;
+      document.body.classList.remove('feedback-correct', 'feedback-wrong');
+      document.body.classList.add(isCorrect ? 'feedback-correct' : 'feedback-wrong');
+      setTimeout(() => {
+        document.body.classList.remove('feedback-correct', 'feedback-wrong');
+      }, FEEDBACK_FLASH_MS);
+    }
+
+    function playTone(freq, duration, type) {
+      const AudioCtx = window.AudioContext || window.webkitAudioContext;
+      if (!AudioCtx) return;
+      if (!playTone.ctx) playTone.ctx = new AudioCtx();
+      const ctx = playTone.ctx;
+      if (ctx.state === 'suspended') ctx.resume();
+
+      const oscillator = ctx.createOscillator();
+      const gainNode = ctx.createGain();
+      oscillator.type = type;
+      oscillator.frequency.setValueAtTime(freq, ctx.currentTime);
+      gainNode.gain.setValueAtTime(0.0001, ctx.currentTime);
+      gainNode.gain.exponentialRampToValueAtTime(0.08, ctx.currentTime + 0.01);
+      gainNode.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + duration);
+      oscillator.connect(gainNode);
+      gainNode.connect(ctx.destination);
+      oscillator.start();
+      oscillator.stop(ctx.currentTime + duration + 0.02);
+    }
+
+    function playFeedback(isCorrect) {
+      if (!shouldUseAudioFeedback()) return;
+      if (isCorrect) {
+        playTone(700, 0.12, 'sine');
+        setTimeout(() => playTone(900, 0.12, 'sine'), 80);
+      } else {
+        playTone(220, 0.16, 'sawtooth');
+        setTimeout(() => playTone(160, 0.18, 'square'), 90);
+      }
+    }
+
+    function triggerFeedback(isCorrect) {
+      flashFeedback(isCorrect);
+      playFeedback(isCorrect);
+    }
+
+    function finalizeTrial(responseType, rt, endedByTimeout = false) {
+      if (!taskActive) return;
+      const trial = trialData[currentTrial - 1];
+      if (!trial || trial.completed) return;
+
+      clearTimeout(trialTimeout);
+      awaitingResponse = false;
+
+      trial.response = responseType;
+      trial.rt = rt === null ? null : Math.round(rt);
+      trial.completed = true;
+      trial.endedByTimeout = endedByTimeout;
+
+      let isCorrect = false;
+      if (trial.kind === 'go') {
+        isCorrect = responseType === 'press';
+      } else {
+        isCorrect = responseType === 'none';
+      }
+      trial.correct = isCorrect;
+
+      applyPerTrialAdjustment(isCorrect);
+      triggerFeedback(isCorrect);
+      showFixation();
+      scheduleNextTrial(responseType === 'press' ? FAST_NEXT_DELAY : interTrialInterval);
+    }
+
+    function startTask() {
+      readSettings();
+      clearScheduledTimeouts();
+      taskActive = true;
+      currentTrial = 0;
+      trialData = [];
+      roundSummary = null;
+      generateTrials();
+      updateStatusBar();
+      showFixation();
+      document.getElementById('setupPanel').classList.add('hidden');
+      document.getElementById('instructions').classList.remove('hidden');
+      startBtn.classList.add('hidden');
+      scheduleNextTrial(1000);
+    }
+
+    function nextTrial() {
+      if (!taskActive) return;
+      if (currentTrial >= trials.length) {
+        endTask();
+        return;
+      }
+
+      const kind = trials[currentTrial];
+      renderStimulus(kind);
+      currentTrial++;
+      updateStatusBar();
+
+      stimulusOnset = performance.now();
+      awaitingResponse = true;
+
+      trialData.push({
+        index: currentTrial,
+        kind,
+        stimulusLabel: kind === 'go' ? (goStimulus.image ? '[Go Image]' : goStimulus.text) : (nogoStimulus.image ? '[No-Go Image]' : nogoStimulus.text),
+        response: null,
+        rt: null,
+        correct: false,
+        trialDuration: currentTrialDuration,
+        completed: false,
+        endedByTimeout: false
+      });
+
+      trialTimeout = setTimeout(() => {
+        finalizeTrial('none', null, true);
+      }, currentTrialDuration);
+    }
+
+    document.addEventListener('keydown', function(event) {
+      if (!taskActive || !awaitingResponse) return;
+      if (event.code !== 'Space') return;
+      event.preventDefault();
+      const rt = performance.now() - stimulusOnset;
+      finalizeTrial('press', rt, false);
+    });
+
+    function endTask() {
+      taskActive = false;
+      awaitingResponse = false;
+      clearScheduledTimeouts();
+      showFixation();
+
+      let correctGo = 0;
+      let missedGo = 0;
+      let falseAlarms = 0;
+      let correctNoGo = 0;
+      let goRTs = [];
+      let totalCorrect = 0;
+
+      trialData.forEach(trial => {
+        if (trial.correct) totalCorrect++;
+        if (trial.kind === 'go') {
+          if (trial.response === 'press') {
+            correctGo++;
+            if (typeof trial.rt === 'number') goRTs.push(trial.rt);
+          } else {
+            missedGo++;
+          }
+        } else {
+          if (trial.response === 'press') {
+            falseAlarms++;
+          } else {
+            correctNoGo++;
+          }
+        }
+      });
+
+      const accuracy = trialData.length ? (totalCorrect / trialData.length) * 100 : 0;
+      const avgRT = goRTs.length ? Math.round(goRTs.reduce((a, b) => a + b, 0) / goRTs.length) : 'N/A';
+
+      const nextRoundTrialTime = accuracy >= adaptiveThreshold
+        ? clampTrialTime(baseTrialDuration - adaptiveStep)
+        : clampTrialTime(baseTrialDuration + adaptiveStep);
+
+      roundSummary = {
+        correctGo,
+        missedGo,
+        falseAlarms,
+        correctNoGo,
+        avgRT,
+        accuracy: Math.round(accuracy * 10) / 10,
+        nextRoundTrialTime
+      };
+
+      try {
+        localStorage.setItem('gng_next_trial_duration', String(nextRoundTrialTime));
+      } catch (e) {}
+
+      document.getElementById('container').innerHTML = `
+        <div class="panel">
+          <h2>Round Complete</h2>
+          <p><b>Correct Go Responses:</b> ${correctGo}</p>
+          <p><b>Missed Go Trials:</b> ${missedGo}</p>
+          <p><b>False Alarms:</b> ${falseAlarms}</p>
+          <p><b>Correct No-Go Trials:</b> ${correctNoGo}</p>
+          <p><b>Average Reaction Time (Go trials):</b> ${avgRT} ms</p>
+          <p><b>Accuracy:</b> ${roundSummary.accuracy}%</p>
+          <p><b>Next Round Trial Time:</b> ${nextRoundTrialTime} ms ${accuracy >= adaptiveThreshold ? '(decreased)' : '(increased)'}</p>
+          <button onclick="restartTask(false)">Run Again</button>
+          <button class="secondary" onclick="restartTask(true)">Return to Settings</button>
+          <p class="small">Open console (F12) for full trial data.</p>
+        </div>
+      `;
+
+      console.log('Trial Data:', trialData);
+      console.log('Round Summary:', roundSummary);
+    }
+
+    function restartTask(showSettings) {
+      try {
+        if (showSettings) {
+          localStorage.removeItem('gng_next_trial_duration');
+        }
+      } catch (e) {}
+      location.reload();
+    }
+    window.restartTask = restartTask;
+
+    function updateStimulusPreview(kind) {
+      const stim = kind === 'go' ? goStimulus : nogoStimulus;
+      const previewEl = document.getElementById(kind === 'go' ? 'goPreviewText' : 'nogoPreviewText');
+      if (stim.image) {
+        previewEl.textContent = `Image selected: ${stim.fileName || 'Custom image'}`;
+      } else {
+        previewEl.textContent = 'Using text stimulus.';
+      }
+    }
+
+    function handleImageUpload(inputEl, kind) {
+      const file = inputEl.files && inputEl.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = function(e) {
+        const target = kind === 'go' ? goStimulus : nogoStimulus;
+        target.image = e.target.result;
+        target.fileName = file.name;
+        updateStimulusPreview(kind);
+      };
+      reader.readAsDataURL(file);
+    }
+
+    function removeStimulusImage(kind) {
+      const target = kind === 'go' ? goStimulus : nogoStimulus;
+      target.image = null;
+      target.fileName = null;
+      document.getElementById(kind === 'go' ? 'goFileInput' : 'nogoFileInput').value = '';
+      updateStimulusPreview(kind);
+    }
+
+    document.getElementById('goFileInput').addEventListener('change', function() {
+      handleImageUpload(this, 'go');
+    });
+    document.getElementById('nogoFileInput').addEventListener('change', function() {
+      handleImageUpload(this, 'nogo');
+    });
+    document.getElementById('removeGoImageBtn').addEventListener('click', function() {
+      removeStimulusImage('go');
+    });
+    document.getElementById('removeNogoImageBtn').addEventListener('click', function() {
+      removeStimulusImage('nogo');
+    });
+
+    function loadSavedAdaptiveStartValue() {
+      try {
+        const saved = localStorage.getItem('gng_next_trial_duration');
+        if (saved !== null && saved !== '') {
+          const parsed = Number(saved);
+          if (!Number.isNaN(parsed) && parsed >= MIN_TRIAL_TIME) {
+            document.getElementById('trialDurationInput').value = parsed;
+          }
+        }
+      } catch (e) {}
+    }
+
+    startBtn.addEventListener('click', startTask);
+    loadSavedAdaptiveStartValue();
+    updateStatusBar();
+    updateStimulusPreview('go');
+    updateStimulusPreview('nogo');
+  </script>
+</body>
+</html>
