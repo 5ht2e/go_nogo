@@ -1,0 +1,279 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Cognitive Control Task</title>
+  <style>
+    body {
+      font-family: Arial;
+      text-align: center;
+      background: #111;
+      color: white;
+    }
+
+    #box {
+      width: 200px;
+      height: 200px;
+      margin: 60px auto;
+      border: 4px solid white;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 48px;
+    }
+
+    input {
+      padding: 5px;
+      margin: 5px;
+    }
+
+    button {
+      padding: 10px 20px;
+      margin-top: 10px;
+      font-size: 16px;
+    }
+
+    .hidden {
+      display: none;
+    }
+  </style>
+</head>
+<body>
+
+<!-- START MENU -->
+<div id="startMenu">
+  <h1>Cognitive Control Task</h1>
+
+  <p><b>Instructions:</b></p>
+  <p>
+    A number will appear in different formats (word, numeral, roman).<br>
+    The box color tells you the rule:<br><br>
+    🔵 Blue = SAME NUMBER (meaning)<br>
+    🔴 Red = SAME FORMAT (physical)<br><br>
+
+    Compare the current stimulus to the previous one:<br>
+    Press <b>J = SAME</b><br>
+    Press <b>F = DIFFERENT</b><br><br>
+
+    Respond as quickly and accurately as possible.
+  </p>
+
+  <p>
+    Duration (minutes): <input id="durationInput" type="number" value="1"><br>
+    Initial time limit (ms): <input id="timeInput" type="number" value="3000">
+  </p>
+
+  <button onclick="startExperiment()">Start</button>
+</div>
+
+<!-- TASK -->
+<div id="taskScreen" class="hidden">
+  <h2>F = DIFFERENT | J = SAME</h2>
+  <div id="box"></div>
+
+  <div id="feedback"></div>
+  <div id="rt"></div>
+  <div id="timer"></div>
+</div>
+
+<!-- RESULTS -->
+<div id="resultsScreen" class="hidden">
+  <h1>Results</h1>
+  <p id="accuracy"></p>
+  <p id="avgRT"></p>
+  <button onclick="location.reload()">Restart</button>
+</div>
+
+<script>
+// ------------------ SETUP ------------------
+const numbers = [1,2,3,4,5,6,7,8,9];
+const formats = ["arabic", "word", "roman"];
+
+const wordMap = {1:"one",2:"two",3:"three",4:"four",5:"five",6:"six",7:"seven",8:"eight",9:"nine"};
+const romanMap = {1:"I",2:"II",3:"III",4:"IV",5:"V",6:"VI",7:"VII",8:"VIII",9:"IX"};
+
+let previousStimulus = null;
+let currentStimulus = null;
+let currentRule = null;
+
+let responseKey = null;
+let responseRT = null;
+
+let responseTimeLimit = 3000;
+let correctStreak = 0;
+let incorrectStreak = 0;
+
+let trialStartTime = null;
+let trialID = 0;
+
+// RESULTS
+let totalTrials = 0;
+let correctTrials = 0;
+let totalRT = 0;
+
+// SESSION
+let experimentEndTime = null;
+
+// ------------------ UTIL ------------------
+function getStimulus(value, format) {
+  let display =
+    format === "arabic" ? value.toString() :
+    format === "word" ? wordMap[value] :
+    romanMap[value];
+
+  return { value, format, display };
+}
+
+function rand(arr) {
+  return arr[Math.floor(Math.random() * arr.length)];
+}
+
+function generateStimulus(previous, rule) {
+  if (!previous) return getStimulus(rand(numbers), rand(formats));
+
+  let isSame = Math.random() < 0.5;
+  let value, format;
+
+  if (rule === "meaning") {
+    value = isSame ? previous.value : rand(numbers.filter(v => v !== previous.value));
+    format = rand(formats);
+  } else {
+    format = isSame ? previous.format : rand(formats.filter(f => f !== previous.format));
+    value = rand(numbers);
+  }
+
+  return getStimulus(value, format);
+}
+
+function evaluateCorrect() {
+  if (!previousStimulus) return null;
+
+  let isSame = currentRule === "meaning"
+    ? currentStimulus.value === previousStimulus.value
+    : currentStimulus.format === previousStimulus.format;
+
+  return isSame ? "j" : "f";
+}
+
+function updateAdaptive(correct) {
+  if (correct) {
+    correctStreak++;
+    incorrectStreak = 0;
+    if (correctStreak === 3) {
+      responseTimeLimit = Math.max(500, responseTimeLimit - 100);
+      correctStreak = 0;
+    }
+  } else {
+    incorrectStreak++;
+    correctStreak = 0;
+    if (incorrectStreak === 3) {
+      responseTimeLimit += 100;
+      incorrectStreak = 0;
+    }
+  }
+}
+
+// ------------------ TASK ------------------
+function startTrial() {
+  trialID++;
+  let thisTrial = trialID;
+
+  previousStimulus = currentStimulus;
+  currentStimulus = generateStimulus(previousStimulus, currentRule);
+  currentRule = Math.random() < 0.5 ? "meaning" : "physical";
+
+  responseKey = null;
+  responseRT = null;
+
+  let box = document.getElementById("box");
+  box.textContent = currentStimulus.display;
+  box.style.backgroundColor = currentRule === "meaning" ? "blue" : "red";
+
+  trialStartTime = performance.now();
+
+  document.getElementById("timer").innerText =
+    "Time limit: " + responseTimeLimit + " ms";
+
+  setTimeout(() => {
+    if (thisTrial !== trialID) return;
+
+    let correctKey = evaluateCorrect();
+    let correct = false;
+
+    if (responseKey === null) {
+      document.getElementById("feedback").innerText = "Too Slow";
+    } else {
+      correct = (responseKey === correctKey);
+    }
+
+    // RESULTS TRACKING
+    if (previousStimulus !== null) {
+      totalTrials++;
+      if (correct) correctTrials++;
+      if (responseRT) totalRT += responseRT;
+    }
+
+    updateAdaptive(correct);
+
+    if (Date.now() >= experimentEndTime) {
+      endExperiment();
+    } else {
+      nextTrial();
+    }
+
+  }, responseTimeLimit);
+}
+
+function nextTrial() {
+  let box = document.getElementById("box");
+  box.textContent = "";
+  box.style.backgroundColor = "transparent";
+
+  setTimeout(startTrial, 300);
+}
+
+document.addEventListener("keydown", (e) => {
+  if (e.key !== "f" && e.key !== "j") return;
+  if (responseKey !== null) return;
+
+  responseKey = e.key;
+  responseRT = Math.round(performance.now() - trialStartTime);
+
+  let correct = (responseKey === evaluateCorrect());
+
+  document.getElementById("feedback").innerText =
+    correct ? "Correct" : "Wrong";
+
+  document.getElementById("rt").innerText =
+    "RT: " + responseRT + " ms";
+});
+
+// ------------------ FLOW ------------------
+function startExperiment() {
+  let minutes = parseFloat(document.getElementById("durationInput").value);
+  responseTimeLimit = parseInt(document.getElementById("timeInput").value);
+
+  experimentEndTime = Date.now() + minutes * 60000;
+
+  document.getElementById("startMenu").classList.add("hidden");
+  document.getElementById("taskScreen").classList.remove("hidden");
+
+  startTrial();
+}
+
+function endExperiment() {
+  document.getElementById("taskScreen").classList.add("hidden");
+  document.getElementById("resultsScreen").classList.remove("hidden");
+
+  let accuracy = totalTrials > 0 ? (correctTrials / totalTrials * 100).toFixed(1) : 0;
+  let avgRT = correctTrials > 0 ? Math.round(totalRT / correctTrials) : 0;
+
+  document.getElementById("accuracy").innerText =
+    "Accuracy: " + accuracy + "%";
+
+  document.getElementById("avgRT").innerText =
+    "Average RT: " + avgRT + " ms";
+}
+</script>
+
+</body>
+</html>
