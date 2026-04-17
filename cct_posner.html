@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <title>Cognitive Control Task</title>
+  <title>Cognitive Control Training with POSNER</title>
   <style>
     body {
       font-family: Arial;
@@ -58,9 +58,11 @@
   </p>
 
   <p>
+    
     Duration (minutes): <input id="durationInput" type="number" value="1"><br>
-    Initial time limit (ms): <input id="timeInput" type="number" value="3000">
-  </p>
+    Initial time limit (ms): <input id="timeInput" type="number" value="3000"><br>
+    Minimum time limit (ms): <input id="minTimeInput" type="number" value="500">
+</p>
 
   <button onclick="startExperiment()">Start</button>
 </div>
@@ -80,6 +82,7 @@
   <h1>Results</h1>
   <p id="accuracy"></p>
   <p id="avgRT"></p>
+  <p id="minTime"></p>
   <button onclick="location.reload()">Restart</button>
 </div>
 
@@ -99,6 +102,10 @@ let responseKey = null;
 let responseRT = null;
 
 let responseTimeLimit = 3000;
+let minTimeLimit = 500;
+if (minTimeLimit > responseTimeLimit) {
+  minTimeLimit = responseTimeLimit;
+}
 let correctStreak = 0;
 let incorrectStreak = 0;
 
@@ -109,9 +116,12 @@ let trialID = 0;
 let totalTrials = 0;
 let correctTrials = 0;
 let totalRT = 0;
+let minTimeReached = Infinity;
 
 // SESSION
 let experimentEndTime = null;
+
+
 
 // ------------------ UTIL ------------------
 function getStimulus(value, format) {
@@ -159,7 +169,12 @@ function updateAdaptive(correct) {
     correctStreak++;
     incorrectStreak = 0;
     if (correctStreak === 3) {
-      responseTimeLimit = Math.max(500, responseTimeLimit - 100);
+      responseTimeLimit = Math.max(minTimeLimit, responseTimeLimit - 100);
+
+    // track minimum reached
+    if (responseTimeLimit < minTimeReached) {
+    minTimeReached = responseTimeLimit;
+    }
       correctStreak = 0;
     }
   } else {
@@ -251,12 +266,15 @@ document.addEventListener("keydown", (e) => {
 function startExperiment() {
   let minutes = parseFloat(document.getElementById("durationInput").value);
   responseTimeLimit = parseInt(document.getElementById("timeInput").value);
+  minTimeLimit = parseInt(document.getElementById("minTimeInput").value);
+  minTimeReached = responseTimeLimit;
 
   experimentEndTime = Date.now() + minutes * 60000;
 
   document.getElementById("startMenu").classList.add("hidden");
   document.getElementById("taskScreen").classList.remove("hidden");
 
+  
   startTrial();
 }
 
@@ -272,6 +290,9 @@ function endExperiment() {
 
   document.getElementById("avgRT").innerText =
     "Average RT: " + avgRT + " ms";
+  
+  document.getElementById("minTime").innerText =
+    "Minimum Time Limit Reached: " + minTimeReached + " ms";
 }
 </script>
 
