@@ -182,7 +182,7 @@
         </div>
         <div class="setting-item">
           <label for="totalTrialsInput">Trials Per Round</label>
-          <input type="number" id="totalTrialsInput" value="32" min="1" max="500">
+          <input type="number" id="totalTrialsInput" value="100" min="1" max="500">
         </div>
         <div class="setting-item">
           <label for="trialDurationInput">Starting Trial Time (ms)</label>
@@ -190,7 +190,7 @@
         </div>
         <div class="setting-item">
           <label for="roundThresholdInput">Adaptive Accuracy Threshold (%)</label>
-          <input type="number" id="roundThresholdInput" value="85" min="0" max="100" step="1">
+          <input type="number" id="roundThresholdInput" value="95" min="0" max="100" step="1">
         </div>
         <div class="setting-item">
           <label for="adaptiveStepInput">Adaptive Change Per Round (ms)</label>
@@ -547,6 +547,7 @@
       });
 
       const accuracy = trialData.length ? (totalCorrect / trialData.length) * 100 : 0;
+      const accuracyNoGo = trialData.length ? (correctNoGo / (correctNoGo + falseAlarms)) * 100 : 0;
       const avgRT = goRTs.length ? Math.round(goRTs.reduce((a, b) => a + b, 0) / goRTs.length) : 'N/A';
 
       const nextRoundTrialTime = accuracy >= adaptiveThreshold
@@ -560,6 +561,7 @@
         correctNoGo,
         avgRT,
         accuracy: Math.round(accuracy * 10) / 10,
+        accuracyNoGo: Math.round(accuracyNoGo * 10) / 10,
         nextRoundTrialTime
       };
 
@@ -576,6 +578,7 @@
           <p><b>Correct No-Go Trials:</b> ${correctNoGo}</p>
           <p><b>Average Reaction Time (Go trials):</b> ${avgRT} ms</p>
           <p><b>Accuracy:</b> ${roundSummary.accuracy}%</p>
+          <p><b>No-Go Accuracy:</b> ${roundSummary.accuracyNoGo}%</p>
           <p><b>Next Round Trial Time:</b> ${nextRoundTrialTime} ms ${accuracy >= adaptiveThreshold ? '(decreased)' : '(increased)'}</p>
           <button onclick="restartTask(false)">Run Again</button>
           <button class="secondary" onclick="restartTask(true)">Return to Settings</button>
